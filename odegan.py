@@ -127,32 +127,15 @@ if __name__ == '__main__':
     ngf = int(opt.ngf)
     ndf = int(opt.ndf)
 
-    # custom weights initialization called on netG and netD
-    # def weights_init(m):
-    #     classname = m.__class__.__name__
-    #     if classname.find('Conv') != -1:
-    #         torch.nn.init.normal_(m.weight, 0.0, 0.02)
-    #     elif classname.find('BatchNorm') != -1:
-    #         torch.nn.init.normal_(m.weight, 1.0, 0.02)
-    #         torch.nn.init.zeros_(m.bias)
 
+    # custom weights initialization called on netG and netD
     def weights_init(m):
         classname = m.__class__.__name__
         if classname.find('Conv') != -1:
-            torch.nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
-        # elif classname.find('BatchNorm') != -1:
-            # torch.nn.init.normal_(m.weight, 1.0, 0.02)
-            # torch.nn.init.ones_(m.weight)
-            # torch.nn.init.zeros_(m.bias)
-
-    def weights_init_decoder(m):
-        classname = m.__class__.__name__
-        if classname.find('Conv') != -1:
-            torch.nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('leaky_relu', param=0.1))
-        # elif classname.find('BatchNorm') != -1:
-            # torch.nn.init.normal_(m.weight, 1.0, 0.02)
-            # torch.nn.init.ones_(m.weight)
-            # torch.nn.init.zeros_(m.bias)
+            torch.nn.init.normal_(m.weight, 0.0, 0.02)
+        elif classname.find('BatchNorm') != -1:
+            torch.nn.init.normal_(m.weight, 1.0, 0.02)
+            torch.nn.init.zeros_(m.bias)
 
 
     class Generator(nn.Module):
@@ -194,7 +177,6 @@ if __name__ == '__main__':
     # ODE GAN
     netG = Generator(ngpu)
     netG.apply(weights_init)
-
     netG = netG.to(device)
 
     if opt.netG != '':
@@ -247,7 +229,7 @@ if __name__ == '__main__':
 
 
     netD = Discriminator(ngpu).to(device)
-    netD.apply(weights_init_decoder)
+    netD.apply(weights_init)
 
     netD = netD.to(device)
 
@@ -285,12 +267,10 @@ if __name__ == '__main__':
             if phi_0_param.grad is not None:
                 if grad_norm is None:
                     # grad_norm = disc_reg * phi_0_param.grad.square().sum()
-                    # grad_norm = phi_0_param.grad.norm()
-                    grad_norm = phi_0_param.grad.square().sum()# .sqrt()
+                    grad_norm = phi_0_param.grad.square().sum()
                 else:
                     # grad_norm = grad_norm + disc_reg * phi_0_param.grad.square().sum()
-                    # grad_norm = grad_norm + phi_0_param.grad.norm()
-                    grad_norm = grad_norm + phi_0_param.grad.square().sum()# .sqrt()
+                    grad_norm = grad_norm + phi_0_param.grad.square().sum()
 
         # print("grad norm", grad_norm)
         # grad_norm = disc_reg * grad_norm
@@ -298,13 +278,12 @@ if __name__ == '__main__':
 
         # Preserve gradients for regularization in cache
         D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()))
-        grad_norm = grad_norm.detach()
 
         # Preserve the gradients of the discriminator gradients (obtained via the norm calculation)
         disc_grad_norm = torch.tensor(0.0, device=device)
         for d_grad, in zip(D_norm_grads):
             # compute discriminator norm
-            disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum().sqrt()
+            disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum()
 
         # Reapply the gradients obtained from actual forward step
         # for d_p, t_p in zip(D.parameters(), theta_1.parameters()):
@@ -532,41 +511,21 @@ if __name__ == '__main__':
 
         return DISC_GRAD_CACHE, GEN_GRAD_CACHE, errD, errG, D_x, D_G_z1, D_G_z2
 
-
-    step_size = opt.step_size
-
     # Save hyper parameters
     writer.add_hparams(vars(opt), metric_dict={})
 
-
-    def schedule(global_step, num_steps):
-        lower_threshold = 500
-
-        # threshold_steps = (opt.niter - 10) * num_steps
-        threshold_steps = 400000
-
-        if global_step < lower_threshold:
-            step_size = opt.step_size
-
-        elif global_step >= lower_threshold and global_step <= threshold_steps:
-            step_size = opt.step_size * 4  # increases step size to 4x current step size
-
-        # elif global_step >= lower_threshold and global_step <= threshold_steps:
-        #     scale = (global_step - lower_threshold) / (threshold_steps - lower_threshold)
-        #     step_size = opt.step_size + scale * 3 * opt.step_size  # increases step size to 4x current step size
-
-        else:
-            step_size = opt.step_size * 2
-
-        return step_size
-
-
+    step_size = opt.step_size
     global_step = 0
+
     for epoch in range(opt.niter):
         for i, data in enumerate(dataloader, 0):
             # Schedule
-            num_steps = len(dataloader)
-            step_size = schedule(global_step, num_steps)
+            if epoch == 0 and i == 500:
+                step_size = opt.step_size * 4
+            elif epoch == 100 and i == 0:
+                step_size = opt.step_size * 2
+            elif epoch == 180 and i == 0:
+                step_size = opt.step_size
 
             if opt.ode == 'heun':
 
