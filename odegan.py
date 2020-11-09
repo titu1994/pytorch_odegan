@@ -25,8 +25,8 @@ if __name__ == '__main__':
     parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
     parser.add_argument('--imageSize', type=int, default=32, help='the height / width of the input image to network')
     parser.add_argument('--nz', type=int, default=128, help='size of the latent z vector')
-    parser.add_argument('--ngf', type=int, default=64)
-    parser.add_argument('--ndf', type=int, default=64)
+    parser.add_argument('--ngf', type=int, default=256)
+    parser.add_argument('--ndf', type=int, default=128)
     parser.add_argument('--niter', type=int, default=100, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
     parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
@@ -127,7 +127,6 @@ if __name__ == '__main__':
     ngf = int(opt.ngf)
     ndf = int(opt.ndf)
 
-
     # custom weights initialization called on netG and netD
     def weights_init(m):
         classname = m.__class__.__name__
@@ -138,22 +137,58 @@ if __name__ == '__main__':
             torch.nn.init.zeros_(m.bias)
 
 
+    # class Generator(nn.Module):
+    #     def __init__(self, ngpu):
+    #         super(Generator, self).__init__()
+    #         self.ngpu = ngpu
+    #         self.project = nn.Conv2d(nz, ngf * 8 * 4 * 4, 1, 1, 0, bias=False)
+    #         self.main = nn.Sequential(
+    #             # state size. (ngf*8) x 4 x 4
+    #             nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ngf * 4),
+    #             nn.ReLU(True),
+    #             # state size. (ngf*4) x 8 x 8
+    #             nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ngf * 2),
+    #             nn.ReLU(True),
+    #             # state size. (ngf*2) x 16 x 16
+    #             nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ngf),
+    #             nn.ReLU(True),
+    #             # # state size. (ngf) x 32 x 32
+    #             nn.Conv2d(ngf, nc, 3, 1, 1, bias=False),
+    #             nn.Tanh()
+    #             # state size. (nc) x 64 x 64
+    #         )
+    #
+    #     def forward(self, input):
+    #         if input.is_cuda and self.ngpu > 1:
+    #             raise NotImplemented()
+    #             # output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+    #         else:
+    #             x = self.project(input)
+    #             x = x.view(-1, ngf * 8, 4, 4)
+    #             output = self.main(x)
+    #
+    #         return output
+
+
     class Generator(nn.Module):
         def __init__(self, ngpu):
             super(Generator, self).__init__()
             self.ngpu = ngpu
-            self.project = nn.Conv2d(nz, ngf * 8 * 4 * 4, 1, 1, 0, bias=False)
+            self.project = nn.Conv2d(nz, ngf * 4 * 4, 1, 1, 0, bias=False)
             self.main = nn.Sequential(
                 # state size. (ngf*8) x 4 x 4
-                nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(ngf * 4),
+                nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(ngf),
                 nn.ReLU(True),
                 # state size. (ngf*4) x 8 x 8
-                nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(ngf * 2),
+                nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(ngf),
                 nn.ReLU(True),
                 # state size. (ngf*2) x 16 x 16
-                nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
                 nn.BatchNorm2d(ngf),
                 nn.ReLU(True),
                 # # state size. (ngf) x 32 x 32
@@ -168,7 +203,7 @@ if __name__ == '__main__':
                 # output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
             else:
                 x = self.project(input)
-                x = x.view(-1, ngf * 8, 4, 4)
+                x = x.view(x.shape[0], ngf, 4, 4)
                 output = self.main(x)
 
             return output
@@ -184,38 +219,94 @@ if __name__ == '__main__':
     print(netG)
 
 
+    # class Discriminator(nn.Module):
+    #     def __init__(self, ngpu):
+    #         super(Discriminator, self).__init__()
+    #         self.ngpu = ngpu
+    #         self.main = nn.Sequential(
+    #             # input is (nc) x 32 x 32
+    #             nn.Conv2d(nc, ndf, 3, 1, 1, bias=False),
+    #             nn.BatchNorm2d(ndf),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             nn.Conv2d(ndf, ndf, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ndf),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             # state size. (ndf) x 16 x 16
+    #             nn.Conv2d(ndf, ndf * 2, 3, 1, 1, bias=False),
+    #             nn.BatchNorm2d(ndf * 2),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             nn.Conv2d(ndf * 2, ndf * 2, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ndf * 2),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             # state size. (ndf*2) x 8 x 8
+    #             nn.Conv2d(ndf * 2, ndf * 4, 3, 1, 1, bias=False),
+    #             nn.BatchNorm2d(ndf * 4),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             nn.Conv2d(ndf * 4, ndf * 4, 4, 2, 1, bias=False),
+    #             nn.BatchNorm2d(ndf * 4),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             # state size. (ndf*4) x 4 x 4
+    #             nn.Conv2d(ndf * 4, ndf * 8, 3, 1, 1, bias=False),
+    #             nn.BatchNorm2d(ndf * 8),
+    #             nn.LeakyReLU(0.1, inplace=True),
+    #             # state size. (ndf*8) x 2 x 2
+    #             nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+    #             # nn.Sigmoid()
+    #         )
+    #
+    #     def forward(self, input):
+    #         if input.is_cuda and self.ngpu > 1:
+    #             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
+    #         else:
+    #             output = self.main(input)
+    #
+    #         return output.view(-1, 1).squeeze(1)
+
+
     class Discriminator(nn.Module):
         def __init__(self, ngpu):
             super(Discriminator, self).__init__()
             self.ngpu = ngpu
             self.main = nn.Sequential(
                 # input is (nc) x 32 x 32
+                # block 0
                 nn.Conv2d(nc, ndf, 3, 1, 1, bias=False),
                 nn.BatchNorm2d(ndf),
                 nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(ndf, ndf, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(ndf),
-                nn.LeakyReLU(0.1, inplace=True),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                nn.AvgPool2d(2),
                 # state size. (ndf) x 16 x 16
-                nn.Conv2d(ndf, ndf * 2, 3, 1, 1, bias=False),
-                nn.BatchNorm2d(ndf * 2),
+                # block 1
                 nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(ndf * 2, ndf * 2, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(ndf * 2),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
                 nn.LeakyReLU(0.1, inplace=True),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                nn.AvgPool2d(2),
                 # state size. (ndf*2) x 8 x 8
-                nn.Conv2d(ndf * 2, ndf * 4, 3, 1, 1, bias=False),
-                nn.BatchNorm2d(ndf * 4),
+                # block 2
                 nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(ndf * 4, ndf * 4, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(ndf * 4),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                # nn.BatchNorm2d(ndf * 4),
                 nn.LeakyReLU(0.1, inplace=True),
-                # state size. (ndf*4) x 4 x 4
-                nn.Conv2d(ndf * 4, ndf * 8, 3, 1, 1, bias=False),
-                nn.BatchNorm2d(ndf * 8),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                # nn.BatchNorm2d(ndf * 4),
+                # block 3
                 nn.LeakyReLU(0.1, inplace=True),
-                # state size. (ndf*8) x 2 x 2
-                nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                # nn.BatchNorm2d(ndf * 8),
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.BatchNorm2d(ndf),
+                nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
+                # Global average pooling
+                nn.LeakyReLU(0.1, inplace=True),
+                nn.AdaptiveAvgPool2d(1),
+                # state size. (ndf*4) x 1 x 1
+                nn.Conv2d(ndf, 1, 1, 1, 0, bias=False),
                 # nn.Sigmoid()
             )
 
@@ -274,16 +365,17 @@ if __name__ == '__main__':
 
         # print("grad norm", grad_norm)
         # grad_norm = disc_reg * grad_norm
-        # grad_norm = grad_norm.sqrt()
+        grad_norm = grad_norm.sqrt()
 
         # Preserve gradients for regularization in cache
         D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()))
+        grad_norm = grad_norm.detach()
 
         # Preserve the gradients of the discriminator gradients (obtained via the norm calculation)
         disc_grad_norm = torch.tensor(0.0, device=device)
         for d_grad, in zip(D_norm_grads):
             # compute discriminator norm
-            disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum()
+            disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum().sqrt()
 
         # Reapply the gradients obtained from actual forward step
         # for d_p, t_p in zip(D.parameters(), theta_1.parameters()):
