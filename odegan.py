@@ -352,6 +352,13 @@ if __name__ == '__main__':
         return dest
 
 
+    def normalize_grad(grad):
+        # normalize gradient
+        grad_norm = grad.norm()
+        if grad_norm > 1.:
+            grad.div_(grad_norm)
+        return grad
+
     def heun_ode_step(G: Generator, D: Discriminator, data: torch.Tensor, step_size: float, disc_reg: float):
         # Compute first step of Heun
         theta_1, phi_1, errD, errG, D_x, D_G_z1, D_G_z2 = gan_step(G, D, data, detach_err=False, retain_graph=True)
@@ -380,11 +387,6 @@ if __name__ == '__main__':
         for d_grad, in zip(D_norm_grads):
             # compute discriminator norm
             disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum().sqrt()
-
-        # Reapply the gradients obtained from actual forward step
-        # for d_p, t_p in zip(D.parameters(), theta_1.parameters()):
-        #     if d_p.grad is not None:
-        #         d_p.grad = t_p.grad.clone()
 
         # Detach graph
         errD = errD.detach()
@@ -416,9 +418,7 @@ if __name__ == '__main__':
                 #     grad += disc_reg * d_param.data
 
                 # normalize gradient
-                grad_norm = grad.norm()
-                if grad_norm > 1.:
-                    grad.div_(grad_norm)
+                grad = normalize_grad(grad)
 
                 d_param.data = d_param.data + (step_size * 0.5 * -(grad))
 
@@ -427,9 +427,7 @@ if __name__ == '__main__':
                 grad = phi_0_param.grad + phi_1_param.grad
 
                 # normalize gradient
-                grad_norm = grad.norm()
-                if grad_norm > 1.:
-                    grad.div_(grad_norm)
+                grad = normalize_grad(grad)
 
                 g_param.data = g_param.data + (step_size * 0.5 * -(grad))
 
@@ -450,37 +448,30 @@ if __name__ == '__main__':
         theta_1_cache, phi_1_cache, errD, errG, D_x, D_G_z1, D_G_z2 = gan_step(G, D, data,
                                                                                detach_err=False, retain_graph=True)
 
-        # Reset the parameters of discriminator (they are already preserved in theta_1)
-        for d_param in D.parameters():
-            if d_param.grad is not None:
-                d_param.grad *= 0.
-
         # Compute the L2 norm using the prior computation graph
-        grad_norm = errG
+        grad_norm = None  # errG
         for phi_0_param in G.parameters():
             if phi_0_param.grad is not None:
-                # grad_norm = grad_norm + disc_reg * phi_0_param.grad.square().sum()
-                grad_norm = grad_norm + phi_0_param.grad.square().sum()
+                if grad_norm is None:
+                    # grad_norm = disc_reg * phi_0_param.grad.square().sum()
+                    grad_norm = phi_0_param.grad.square().sum()
+                else:
+                    # grad_norm = grad_norm + disc_reg * phi_0_param.grad.square().sum()
+                    grad_norm = grad_norm + phi_0_param.grad.square().sum()
 
-        # grad_norm = grad_norm.sqrt()
+        # print("grad norm", grad_norm)
+        # grad_norm = disc_reg * grad_norm
+        grad_norm = grad_norm.sqrt()
 
         # Preserve gradients for regularization in cache
-        D_norm_clone = grad_clone(D)
-        D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()), retain_graph=True)
+        D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()))
+        grad_norm = grad_norm.detach()
 
         # Preserve the gradients of the discriminator gradients (obtained via the norm calculation)
         disc_grad_norm = torch.tensor(0.0, device=device)
-        for d_param, d_grad in zip(D_norm_clone.parameters(), D_norm_grads):
-            if d_param.grad is not None:
-                d_param.data = d_grad
-
-                # compute discriminator norm
-                disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum()
-
-        # Reapply the gradients obtained from actual forward step
-        for d_p, t_p in zip(D.parameters(), theta_1_cache.parameters()):
-            if d_p.grad is not None:
-                d_p.grad = t_p.grad
+        for d_grad, in zip(D_norm_grads):
+            # compute discriminator norm
+            disc_grad_norm = disc_grad_norm + d_grad.detach().square().sum().sqrt()
 
         # Detach graph
         errD = errD.detach()
@@ -494,6 +485,7 @@ if __name__ == '__main__':
         for d_param, theta_1_param in zip(D.parameters(), theta_1.parameters()):
             if theta_1_param.grad is not None:
                 theta_1_param.data = d_param.data + (step_size * 0.5 * -theta_1_param.grad)
+
         for g_param, phi_1_param in zip(G.parameters(), phi_1.parameters()):
             if phi_1_param.grad is not None:
                 phi_1_param.data = g_param.data + (step_size * 0.5 * -phi_1_param.grad)
@@ -509,6 +501,7 @@ if __name__ == '__main__':
         for d_param, theta_2_param in zip(D.parameters(), theta_2.parameters()):
             if theta_2_param.grad is not None:
                 theta_2_param.data = d_param.data + (step_size * 0.5 * -theta_2_param.grad)
+
         for g_param, phi_2_param in zip(G.parameters(), phi_2.parameters()):
             if phi_2_param.grad is not None:
                 phi_2_param.data = g_param.data + (step_size * 0.5 * -phi_2_param.grad)
@@ -524,6 +517,7 @@ if __name__ == '__main__':
         for d_param, theta_3_param in zip(D.parameters(), theta_3.parameters()):
             if theta_3_param.grad is not None:
                 theta_3_param.data = d_param.data + (step_size * -theta_3_param.grad)
+
         for g_param, phi_3_param in zip(G.parameters(), phi_3.parameters()):
             if phi_3_param.grad is not None:
                 phi_3_param.data = g_param.data + (step_size * -phi_3_param.grad)
@@ -544,6 +538,9 @@ if __name__ == '__main__':
                 # if disc_reg > 0:
                 #     grad += disc_reg * d_param.data
 
+                # normalize gradient
+                grad = normalize_grad(grad)
+
                 d_param.data = d_param.data + (step_size / 6. * -(grad))
 
         for g_param, phi_1_param, phi_2_param, phi_3_param, phi_4_param in zip(G.parameters(),
@@ -553,16 +550,20 @@ if __name__ == '__main__':
                                                                                phi_4.parameters()):
             if phi_1_param.grad is not None:
                 grad = (phi_1_param.grad + 2 * phi_2_param.grad + 2 * phi_3_param.grad + phi_4_param.grad)
+
+                # normalize gradient
+                grad = normalize_grad(grad)
+
                 g_param.data = g_param.data + (step_size / 6.0 * -(grad))
 
         # Regularization step
-        for d_param, d_grad in zip(D.parameters(), D_norm_clone.parameters()):
+        for d_param, d_grad in zip(D.parameters(), D_norm_grads):
             if d_param.grad is not None:
-                d_param.data = d_param.data - step_size * disc_reg * d_grad.data
+                d_param.data = d_param.data - step_size * disc_reg * d_grad
 
         del theta_1, theta_1_cache, theta_2, theta_2_cache, theta_3, theta_3_cache, theta_4
         del phi_1, phi_1_cache, phi_2, phi_2_cache, phi_3, phi_3_cache, phi_4
-        del D_norm_grads, D_norm_clone
+        del D_norm_grads
 
         return G, D, errD, errG, D_x, D_G_z1, D_G_z2, grad_norm.detach(), disc_grad_norm.detach()
 
