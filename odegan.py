@@ -19,7 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', required=True, help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
+    parser.add_argument('--dataset', required=True, default='cifar10',
+                        help='cifar10 | lsun | mnist |imagenet | folder | lfw | fake')
     parser.add_argument('--dataroot', required=False, help='path to dataset')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=8)
     parser.add_argument('--batchSize', type=int, default=64, help='input batch size')
@@ -28,8 +29,6 @@ if __name__ == '__main__':
     parser.add_argument('--ngf', type=int, default=64)
     parser.add_argument('--ndf', type=int, default=64)
     parser.add_argument('--niter', type=int, default=250, help='number of epochs to train for')
-    parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
-    parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
     parser.add_argument('--cuda', action='store_true', help='enables cuda')
     parser.add_argument('--dry-run', action='store_true', help='check a single training cycle works')
     parser.add_argument('--ngpu', type=int, default=1, help='number of GPUs to use')
@@ -127,15 +126,7 @@ if __name__ == '__main__':
     ngf = int(opt.ngf)
     ndf = int(opt.ndf)
 
-    # custom weights initialization called on netG and netD
-    # def weights_init(m):
-    #     classname = m.__class__.__name__
-    #     if classname.find('Conv') != -1:
-    #         torch.nn.init.normal_(m.weight, 0.0, 0.02)
-    #     elif classname.find('BatchNorm') != -1:
-    #         torch.nn.init.normal_(m.weight, 1.0, 0.02)
-    #         torch.nn.init.zeros_(m.bias)
-
+    # Conv Initialization from SNGAN codebase
     def weights_init(m):
         classname = m.__class__.__name__
         if classname.find('Conv') != -1:
@@ -166,7 +157,7 @@ if __name__ == '__main__':
                 # # state size. (ngf) x 32 x 32
                 nn.Conv2d(ngf, nc, 3, 1, 1, bias=False),
                 nn.Tanh()
-                # state size. (nc) x 64 x 64
+                # state size. (nc) x 32 x 32
             )
 
         def forward(self, input):
@@ -179,42 +170,6 @@ if __name__ == '__main__':
                 output = self.main(x)
 
             return output
-
-
-    # class Generator(nn.Module):
-    #     def __init__(self, ngpu):
-    #         super(Generator, self).__init__()
-    #         self.ngpu = ngpu
-    #         self.project = nn.Conv2d(nz, ngf * 4 * 4, 1, 1, 0, bias=False)
-    #         self.main = nn.Sequential(
-    #             # state size. (ngf*8) x 4 x 4
-    #             nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
-    #             nn.BatchNorm2d(ngf),
-    #             nn.ReLU(True),
-    #             # state size. (ngf*4) x 8 x 8
-    #             nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
-    #             nn.BatchNorm2d(ngf),
-    #             nn.ReLU(True),
-    #             # state size. (ngf*2) x 16 x 16
-    #             nn.ConvTranspose2d(ngf, ngf, 4, 2, 1, bias=False),
-    #             nn.BatchNorm2d(ngf),
-    #             nn.ReLU(True),
-    #             # # state size. (ngf) x 32 x 32
-    #             nn.Conv2d(ngf, nc, 3, 1, 1, bias=False),
-    #             nn.Tanh()
-    #             # state size. (nc) x 64 x 64
-    #         )
-    #
-    #     def forward(self, input):
-    #         if input.is_cuda and self.ngpu > 1:
-    #             raise NotImplemented()
-    #             # output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
-    #         else:
-    #             x = self.project(input)
-    #             x = x.view(x.shape[0], ngf, 4, 4)
-    #             output = self.main(x)
-    #
-    #         return output
 
 
     # ODE GAN
@@ -271,58 +226,6 @@ if __name__ == '__main__':
             return output.view(-1, 1).squeeze(1)
 
 
-    # class Discriminator(nn.Module):
-    #     def __init__(self, ngpu):
-    #         super(Discriminator, self).__init__()
-    #         self.ngpu = ngpu
-    #         self.main = nn.Sequential(
-    #             # input is (nc) x 32 x 32
-    #             # block 0
-    #             nn.Conv2d(nc, ndf, 3, 1, 1, bias=False),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             nn.AvgPool2d(2),
-    #             # state size. (ndf) x 16 x 16
-    #             # block 1
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             nn.AvgPool2d(2),
-    #             # state size. (ndf*2) x 8 x 8
-    #             # block 2
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             # block 3
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.BatchNorm2d(ndf),
-    #             nn.Conv2d(ndf, ndf, 3, 1, 1, bias=False),
-    #             # Global average pooling
-    #             nn.LeakyReLU(0.1, inplace=True),
-    #             nn.AdaptiveAvgPool2d(1),
-    #             # state size. (ndf*4) x 1 x 1
-    #             nn.Conv2d(ndf, 1, 1, 1, 0, bias=False),
-    #             # nn.Sigmoid()
-    #         )
-    #
-    #     def forward(self, input):
-    #         if input.is_cuda and self.ngpu > 1:
-    #             output = nn.parallel.data_parallel(self.main, input, range(self.ngpu))
-    #         else:
-    #             output = self.main(input)
-    #
-    #         return output.view(-1, 1).squeeze(1)
-
     netD = Discriminator(ngpu).to(device)
     netD.apply(weights_init)
 
@@ -334,55 +237,53 @@ if __name__ == '__main__':
 
     criterion = nn.BCEWithLogitsLoss()
 
-    fixed_noise = torch.randn(opt.batchSize, nz, 1, 1, device=device)
+    # fixed_noise = torch.randn(opt.batchSize, nz, 1, 1, device=device)
     real_label = 1
     fake_label = 0
 
     if opt.dry_run:
         opt.niter = 1
 
-
-    def grad_clone(source: torch.nn.Module):
+    # deep copies model + grads of model
+    def grad_clone(source: torch.nn.Module) -> torch.nn.Module:
         dest = copy.deepcopy(source)
         dest.requires_grad_(True)
+
         for s_p, d_p in zip(source.parameters(), dest.parameters()):
             if s_p.grad is not None:
                 d_p.grad = s_p.grad.clone()
 
         return dest
 
-
-    def normalize_grad(grad):
+    # Inplace normalizes gradient; if grad_norm > 1
+    def normalize_grad(grad: torch.Tensor) -> torch.Tensor:
         # normalize gradient
         grad_norm = grad.norm()
         if grad_norm > 1.:
             grad.div_(grad_norm)
         return grad
 
+    # Heun's ODE Step
     def heun_ode_step(G: Generator, D: Discriminator, data: torch.Tensor, step_size: float, disc_reg: float):
         # Compute first step of Heun
         theta_1, phi_1, errD, errG, D_x, D_G_z1, D_G_z2 = gan_step(G, D, data, detach_err=False, retain_graph=True)
 
         # Compute the L2 norm using the prior computation graph
-        grad_norm = None  # errG
+        grad_norm = None
         for phi_0_param in G.parameters():
             if phi_0_param.grad is not None:
                 if grad_norm is None:
-                    # grad_norm = disc_reg * phi_0_param.grad.square().sum()
                     grad_norm = phi_0_param.grad.square().sum()
                 else:
-                    # grad_norm = grad_norm + disc_reg * phi_0_param.grad.square().sum()
                     grad_norm = grad_norm + phi_0_param.grad.square().sum()
 
-        # print("grad norm", grad_norm)
-        # grad_norm = disc_reg * grad_norm
         grad_norm = grad_norm.sqrt()
 
         # Preserve gradients for regularization in cache
         D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()))
         grad_norm = grad_norm.detach()
 
-        # Preserve the gradients of the discriminator gradients (obtained via the norm calculation)
+        # Compute norm of the gradients of the discriminator for logging
         disc_grad_norm = torch.tensor(0.0, device=device)
         for d_grad, in zip(D_norm_grads):
             # compute discriminator norm
@@ -433,7 +334,6 @@ if __name__ == '__main__':
 
         # Regularization step
         for d_param, d_grad in zip(D.parameters(), D_norm_grads):
-            # print("abs diff", d_param.data.abs().mean(), (step_size * disc_reg * d_grad).abs().mean())
             d_param.data = d_param.data - step_size * disc_reg * d_grad
 
         del theta_0, theta_1, theta_2
@@ -446,28 +346,25 @@ if __name__ == '__main__':
     def rk4_ode_step(G: Generator, D: Discriminator, data: torch.Tensor, step_size: float, disc_reg: float):
         # Compute first step of RK4
         theta_1_cache, phi_1_cache, errD, errG, D_x, D_G_z1, D_G_z2 = gan_step(G, D, data,
-                                                                               detach_err=False, retain_graph=True)
+                                                                               detach_err=False,
+                                                                               retain_graph=True)
 
         # Compute the L2 norm using the prior computation graph
         grad_norm = None  # errG
         for phi_0_param in G.parameters():
             if phi_0_param.grad is not None:
                 if grad_norm is None:
-                    # grad_norm = disc_reg * phi_0_param.grad.square().sum()
                     grad_norm = phi_0_param.grad.square().sum()
                 else:
-                    # grad_norm = grad_norm + disc_reg * phi_0_param.grad.square().sum()
                     grad_norm = grad_norm + phi_0_param.grad.square().sum()
 
-        # print("grad norm", grad_norm)
-        # grad_norm = disc_reg * grad_norm
         grad_norm = grad_norm.sqrt()
 
         # Preserve gradients for regularization in cache
         D_norm_grads = torch.autograd.grad(grad_norm, list(D.parameters()))
         grad_norm = grad_norm.detach()
 
-        # Preserve the gradients of the discriminator gradients (obtained via the norm calculation)
+        # Compute norm of the gradients of the discriminator for logging
         disc_grad_norm = torch.tensor(0.0, device=device)
         for d_grad, in zip(D_norm_grads):
             # compute discriminator norm
@@ -642,11 +539,14 @@ if __name__ == '__main__':
                                                                                                            step_size=step_size,
                                                                                                            disc_reg=opt.disc_reg)
 
-            else:
+            elif opt.ode == 'rk4':
                 netG, netD, errD, errG, D_x, D_G_z1, D_G_z2, gen_grad_norm, disc_grad_norm = rk4_ode_step(netG, netD,
                                                                                                           data,
                                                                                                           step_size=step_size,
                                                                                                           disc_reg=opt.disc_reg)
+
+            else:
+                raise ValueError("Only support ode steps are - heun and rk4")
 
             # Cast logits to sigmoid probabilities
             D_x = D_x.sigmoid().item()
@@ -676,8 +576,8 @@ if __name__ == '__main__':
                                   normalize=True)
 
                 # fake = netG(fixed_noise)
-
                 random_noise = torch.randn(opt.batchSize, nz, 1, 1, device=device)
+
                 fake = netG(random_noise)
 
                 vutils.save_image(fake.detach(),
