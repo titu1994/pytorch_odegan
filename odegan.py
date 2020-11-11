@@ -628,12 +628,12 @@ if __name__ == '__main__':
     for epoch in range(opt.niter):
         for i, data in enumerate(dataloader, 0):
             # Schedule
-            if epoch == 0 and i == 500:
-                step_size = opt.step_size * 4
-            elif epoch == 100 and i == 0:
-                step_size = opt.step_size * 2
-            elif epoch == 180 and i == 0:
+            if global_step < 500:
                 step_size = opt.step_size
+            elif global_step >= 500 and global_step <= 400000:
+                step_size = opt.step_size * 4
+            elif global_step > 400000:
+                step_size = opt.step_size * 2
 
             if opt.ode == 'heun':
 
