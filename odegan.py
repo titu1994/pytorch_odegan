@@ -417,7 +417,8 @@ if __name__ == '__main__':
 
                 # normalize gradient
                 grad_norm = grad.norm()
-                grad.div_(grad_norm)
+                if grad_norm > 1.:
+                    grad.div_(grad_norm)
 
                 d_param.data = d_param.data + (step_size * 0.5 * -(grad))
 
@@ -427,7 +428,8 @@ if __name__ == '__main__':
 
                 # normalize gradient
                 grad_norm = grad.norm()
-                grad.div_(grad_norm)
+                if grad_norm > 1.:
+                    grad.div_(grad_norm)
 
                 g_param.data = g_param.data + (step_size * 0.5 * -(grad))
 
